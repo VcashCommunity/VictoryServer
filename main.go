@@ -36,19 +36,6 @@ func main() {
 	}
 	defer db.Close()
 
-	err = db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("answer"))
-		if err != nil {
-			return err
-		}
-		val, err := item.Value()
-		if err != nil {
-			return err
-		}
-		fmt.Printf("The answer is: %s\n", val)
-		return nil
-	})
-
 	fmt.Printf("\n* Call rpc getinfo\n")
 	show_data(xvc.RpcGetInfo())
 
