@@ -167,14 +167,16 @@ func main() {
 	transactions := result["transactions"].([]interface {})
 	for k, v := range transactions {
 		tx := v.(map[string]interface{})
-		house_address := tx["address"].(string)
 		category := tx["category"].(string)
+		if category == "orphan" {
+			//Skip orphans
+			continue
+		}
+		house_address := tx["address"].(string)
 		trans_amount := tx["amount"].(float64)
 		txid := tx["txid"].(string)
-		blockhash := ""
-		if category != "orphan" {
-			blockhash = tx["blockhash"].(string)
-		}
+		// Orphan txs do not have blockhash info
+		blockhash := tx["blockhash"].(string)
 		fmt.Printf("%v %s %s %v %s %s\n", k, house_address, category, trans_amount, txid, blockhash)
 	}
 	fmt.Printf("Lastblock %s", lastblock)
