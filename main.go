@@ -140,6 +140,45 @@ func main() {
 	}
 	txn.Discard()
 
+	fmt.Printf("\n* RpcListSinceBlock\n")
+	// Lists all transactions since the block with the hash.
+	// look at listsinceblock command
+	// "lastblock": b195584958bc47bb0b516c4646ed94d1cca2ec461e8a293db63b83b170fb0365
+	listTxs := xvc.RpcListSinceBlock("62d021d6af6913b962524b177e10d74a7403ef9373b9a66c5784d041c52ec8a1")
+	show_data(listTxs)
+	/*
+	{
+			'account': '',
+			'address': 'some_address',
+			'category': 'receive',
+			'amount': 111,
+			'confirmations': 1,
+			'blockhash': 'some_hash',
+			'blockindex': 1,
+			'blocktime': 11111,
+			'txid': 'some_txid',
+			'time': 11111,
+			'timereceived': 11111,
+			'fromaccount': ''
+		}
+	 */
+	result := listTxs["result"].(map[string]interface{})
+	lastblock := result["lastblock"].(string)
+	transactions := result["transactions"].([]interface {})
+	for k, v := range transactions {
+		tx := v.(map[string]interface{})
+		house_address := tx["address"].(string)
+		category := tx["category"].(string)
+		trans_amount := tx["amount"].(float64)
+		txid := tx["txid"].(string)
+		blockhash := ""
+		if category != "orphan" {
+			blockhash = tx["blockhash"].(string)
+		}
+		fmt.Printf("%v %s %s %v %s %s\n", k, house_address, category, trans_amount, txid, blockhash)
+	}
+	fmt.Printf("Lastblock %s", lastblock)
+
 	fmt.Printf("\n* Get transactions\n")
 	last_tx_detected := false
 	var lastTx string
@@ -150,6 +189,7 @@ func main() {
 		house_address := vv["address"].(string)
 		trans_amount := vv["amount"].(float64)
 		txid := vv["txid"].(string)
+		blockhash := vv["blockhash"].(string)
 
 		if tx_found && txid == prev_txid {
 			last_tx_detected = true
@@ -160,9 +200,9 @@ func main() {
 		scriptPubKey := vout.([]interface{})[0].(map[string]interface{})["scriptPubKey"]
 		user_address := scriptPubKey.(map[string]interface{})["addresses"].([]interface{})[0].(string)
 		if trans_amount > 0 {
-			fmt.Printf("%v %s %s %s\n", trans_amount, txid, house_address, user_address)
+			fmt.Printf("%v %s %s %s %s\n", trans_amount, txid, house_address, user_address, blockhash)
 		} else {
-			fmt.Printf("<0 %v %s %s %s\n", trans_amount, txid, house_address, user_address)
+			fmt.Printf("<0 %v %s\n", trans_amount, blockhash)
 		}
 		lastTx = txid
 	}
