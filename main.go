@@ -121,99 +121,75 @@ func main() {
 	//})
 
 	// Get xvc_last_tx from db
-	prev_txid := ""
-	tx_found := false
+	lastHash := "7f1d1076d7cf0da5527df59c92f44c0555a4ba7e27e73eb0e3181926a4de9cfd"
+	hashFound := false
 	txn := db.NewTransaction(false)
-	item, err := txn.Get([]byte("xvc_last_tx"))
+	item, err := txn.Get([]byte("last_hash"))
 	if err != nil {
-		fmt.Printf("%s\n", err)
+		fmt.Printf("hashFound %s\n", err)
 	} else {
-		tx_found = true
+		hashFound = true
 	}
-	if tx_found {
+	if hashFound {
 		val, err := item.Value()
 		if err != nil {
 			fmt.Printf("%s\n", err)
 		}
-		prev_txid = string(val)
-		fmt.Printf("xvc_last_tx %s\n\n", prev_txid)
+		lastHash = string(val)
+		fmt.Printf("last_hash %s\n\n", lastHash)
 	}
 	txn.Discard()
 
 	fmt.Printf("\n* RpcListSinceBlock\n")
-	// Lists all transactions since the block with the hash.
-	// look at listsinceblock command
-	// "lastblock": b195584958bc47bb0b516c4646ed94d1cca2ec461e8a293db63b83b170fb0365
-	listTxs := xvc.RpcListSinceBlock("62d021d6af6913b962524b177e10d74a7403ef9373b9a66c5784d041c52ec8a1")
-	show_data(listTxs)
-	/*
-	{
-			'account': '',
-			'address': 'some_address',
-			'category': 'receive',
-			'amount': 111,
-			'confirmations': 1,
-			'blockhash': 'some_hash',
-			'blockindex': 1,
-			'blocktime': 11111,
-			'txid': 'some_txid',
-			'time': 11111,
-			'timereceived': 11111,
-			'fromaccount': ''
-		}
-	 */
+	// Lists all transactions since the block with the hash
+	listTxs := xvc.RpcListSinceBlock(lastHash)
+	//show_data(listTxs)
 	result := listTxs["result"].(map[string]interface{})
-	lastblock := result["lastblock"].(string)
-	transactions := result["transactions"].([]interface {})
+	lastHash = result["lastblock"].(string)
+	transactions := result["transactions"].([]interface{})
 	for k, v := range transactions {
 		tx := v.(map[string]interface{})
 		category := tx["category"].(string)
-		if category == "orphan" {
-			//Skip orphans
+		if category == "receive" {
+			house_address := tx["address"].(string)
+			trans_amount := tx["amount"].(float64)
+			txid := tx["txid"].(string)
+			// Orphan txs do not have blockhash info
+			blockhash := tx["blockhash"].(string)
+			txdata := xvc.RpcGetTransaction(txid)
+			// Let's do some magic!
+			user_address := getSenderAddressFromTx(txdata)
+			fmt.Printf("%v %s %v %s %s %s %s\n", k, category, trans_amount, txid, house_address, user_address, blockhash)
+		} else {
+			//Skip orphans and send
 			continue
 		}
-		house_address := tx["address"].(string)
-		trans_amount := tx["amount"].(float64)
-		txid := tx["txid"].(string)
-		// Orphan txs do not have blockhash info
-		blockhash := tx["blockhash"].(string)
-		fmt.Printf("%v %s %s %v %s %s\n", k, house_address, category, trans_amount, txid, blockhash)
 	}
-	fmt.Printf("Lastblock %s", lastblock)
+	fmt.Printf("Lastblock %s\n", lastHash)
 
-	fmt.Printf("\n* Get transactions\n")
-	last_tx_detected := false
-	var lastTx string
-	// After the check we will have all the needed data (HouseAddress, UserAddress, bet_amount)
-	response = xvc.RpcListTransactions("*", "90", "0")
-	for _, u := range response["result"].([]interface{}) {
-		vv := u.(map[string]interface{})
-		house_address := vv["address"].(string)
-		trans_amount := vv["amount"].(float64)
-		txid := vv["txid"].(string)
-		blockhash := vv["blockhash"].(string)
-
-		if tx_found && txid == prev_txid {
-			last_tx_detected = true
-		}
-		txdata := xvc.RpcGetTransaction(txid)
-		// Let's do some magic!
-		vout := txdata["result"].(map[string]interface{})["vout"]
-		scriptPubKey := vout.([]interface{})[0].(map[string]interface{})["scriptPubKey"]
-		user_address := scriptPubKey.(map[string]interface{})["addresses"].([]interface{})[0].(string)
-		if trans_amount > 0 {
-			fmt.Printf("%v %s %s %s %s\n", trans_amount, txid, house_address, user_address, blockhash)
-		} else {
-			fmt.Printf("<0 %v %s\n", trans_amount, blockhash)
-		}
-		lastTx = txid
-	}
-
-	fmt.Printf("Found %v\n", last_tx_detected)
+	//fmt.Printf("\n\n* Get transactions\n")
+	//// After the check we will have all the needed data (HouseAddress, UserAddress, bet_amount)
+	//response = xvc.RpcListTransactions("*", "90", "0")
+	//for _, u := range response["result"].([]interface{}) {
+	//	vv := u.(map[string]interface{})
+	//	category := vv["category"].(string)
+	//	house_address := vv["address"].(string)
+	//	trans_amount := vv["amount"].(float64)
+	//	txid := vv["txid"].(string)
+	//	blockhash := vv["blockhash"].(string)
+	//	txdata := xvc.RpcGetTransaction(txid)
+	//	// Let's do some magic!
+	//	user_address := getSenderAddressFromTx(txdata)
+	//	if category == "receive" {
+	//		fmt.Printf("%s %v %s %s %s %s\n", category, trans_amount, txid, house_address, user_address, blockhash)
+	//	} else {
+	//		fmt.Printf("%s %v %s\n", category, trans_amount, blockhash)
+	//	}
+	//	lastHash = blockhash
+	//}
 
 	err = db.Update(func(txn *badger.Txn) error {
-		fmt.Printf("Last txid %s\n", lastTx)
-		err := txn.Set([]byte("xvc_last_tx"), []byte(lastTx))
+		err := txn.Set([]byte("last_hash"), []byte(lastHash))
 		return err
 	})
 
@@ -222,6 +198,14 @@ func main() {
 	elapsed := time.Since(start)
 	fmt.Printf("check_received took %s\n", elapsed)
 
+}
+
+func getSenderAddressFromTx(tx map[string]interface{}) string {
+	// Let's do some magic!
+	vout := tx["result"].(map[string]interface{})["vout"]
+	scriptPubKey := vout.([]interface{})[0].(map[string]interface{})["scriptPubKey"]
+	senderAddr := scriptPubKey.(map[string]interface{})["addresses"].([]interface{})[0].(string)
+	return senderAddr
 }
 
 func show_data(data map[string]interface{}) {
